@@ -20,7 +20,7 @@ use crate::{
     scrollable_mask::horizontal_scroll_area,
     text::{
         CodeBlockActionsFn, CodeBlockHighlighterFn, LinkClickHandlerFn, MarkdownExtensions,
-        MarkdownNode, TableActionsFn,
+        MarkdownNode, TableActionsFn, TaskToggleEvent, TaskToggleHandlerFn,
         document::{NodeRenderOptions, PrevBlock, flow_position},
         inline::{
             Inline, InlineHighlight, InlineState, code_insets, combine_highlights, fade_highlights,
@@ -79,6 +79,8 @@ pub enum BlockNode {
         spread: bool,
         /// Whether the list item is checked, if None, it's not a checkbox
         checked: Option<bool>,
+        /// The source of a Markdown task item's `[ ]` / `[x]` marker.
+        task_marker: Option<Span>,
         span: Option<Span>,
     },
     CodeBlock(CodeBlock),
@@ -1039,6 +1041,7 @@ fn set_leaf_key(state: &mut Arc<Mutex<InlineState>>, key: u64) {
     *state = Arc::new(Mutex::new(InlineState {
         text,
         editor_key: Some(key),
+        selection_rows: None,
         cleanup_senders: Vec::new(),
         ..Default::default()
     }));
@@ -2685,6 +2688,7 @@ pub(crate) struct NodeContext {
     pub(crate) table_actions: Option<Arc<TableActionsFn>>,
     pub(crate) image_source: Option<Arc<super::text_view::ImageSourceFn>>,
     pub(crate) link_click_handler: Option<Arc<LinkClickHandlerFn>>,
+    pub(crate) task_toggle_handler: Option<Arc<TaskToggleHandlerFn>>,
     pub(crate) markdown_extensions: Arc<MarkdownExtensions>,
     /// This frame's streamed fade-in, when any text is still fading.
     pub(crate) stream_fade: Option<Arc<StreamFadeFrame>>,
@@ -3736,11 +3740,15 @@ impl BlockNode {
 }
 
 impl BlockNode {
+    /// `task_toggle` is the view's task toggle handler with the event a click
+    /// on the item's checkbox reports, when the checkbox should be clickable.
+    #[allow(clippy::too_many_arguments)]
     fn render_list_item_row(
         content: AnyElement,
         ix: usize,
         options: NodeRenderOptions,
         checked: Option<bool>,
+        task_toggle: Option<(Arc<TaskToggleHandlerFn>, TaskToggleEvent)>,
         style: &TextViewStyle,
         line_height: Pixels,
         indent: Pixels,
@@ -3814,7 +3822,18 @@ impl BlockNode {
                                         .size(rems(0.75)),
                                     )
                                 }),
-                        ),
+                        )
+                        .map(|checkbox| match task_toggle {
+                            Some((handler, event)) => checkbox
+                                .id(("task-toggle", event.item_range().start))
+                                .on_click(move |_, window, cx| {
+                                    crate::TextSelection::end(window, cx);
+                                    cx.stop_propagation();
+                                    handler(&event, window, cx);
+                                })
+                                .into_any_element(),
+                            None => checkbox.into_any_element(),
+                        }),
                 )
             })
             .child(
@@ -3845,10 +3864,22 @@ impl BlockNode {
                 children,
                 spread,
                 checked,
-                ..
+                task_marker,
+                span,
             } => {
                 let body = body_font_size(node_cx, window);
                 let indent = body * 1.4;
+                let task_toggle = match (&node_cx.task_toggle_handler, checked, span, task_marker) {
+                    (Some(handler), Some(checked), Some(item), Some(marker)) => Some((
+                        handler.clone(),
+                        TaskToggleEvent::new(
+                            !checked,
+                            item.start..item.end,
+                            marker.start..marker.end,
+                        ),
+                    )),
+                    _ => None,
+                };
                 div()
                     .w_full()
                     .min_w_0()
@@ -3902,6 +3933,7 @@ impl BlockNode {
                                         ix,
                                         options,
                                         *checked,
+                                        task_toggle.clone(),
                                         &node_cx.style,
                                         window.line_height(),
                                         indent,
@@ -3945,6 +3977,7 @@ impl BlockNode {
                                             ix,
                                             options,
                                             *checked,
+                                            task_toggle.clone(),
                                             &node_cx.style,
                                             window.line_height(),
                                             indent,
@@ -4114,6 +4147,9 @@ impl BlockNode {
             .into_any_element()
         } else {
             div()
+                // Scopes the row ids to this table, as the scroll area's id
+                // does, so rows of two tables never share hover state.
+                .id(block_element_id("table", table.span, options.ix))
                 .w_full()
                 .overflow_hidden()
                 .refine_style(&frame)
@@ -4245,8 +4281,17 @@ impl BlockNode {
                             .min_w(px(column.min))
                             .max_w(px(column.max))
                             .overflow_hidden()
-                            .when(align == ColumnumnAlign::Center, |this| this.text_center())
-                            .when(align == ColumnumnAlign::Right, |this| this.text_right())
+                            // Align the content box, not its text: GPUI
+                            // paints `text_align` with an offset that
+                            // `TextLayout` hit-testing leaves out, so
+                            // aligned text could not be selected where it
+                            // shows.
+                            .when(align == ColumnumnAlign::Center, |this| {
+                                this.flex().flex_col().items_center()
+                            })
+                            .when(align == ColumnumnAlign::Right, |this| {
+                                this.flex().flex_col().items_end()
+                            })
                             .px_3()
                             .py(px(7.))
                             .refine_style(&style.table_cell())
@@ -4265,6 +4310,9 @@ impl BlockNode {
             }
             rows.push(
                 div()
+                    // GPUI keys hover state by element id, so each row needs
+                    // its own for its hover highlight to follow the pointer.
+                    .id(("row", row_ix))
                     .w_full()
                     .when(row_ix < row_count - 1, |this| this.border_b_1())
                     .border_color(style.border())
@@ -4284,6 +4332,11 @@ impl BlockNode {
                         this.when_some(bottom_left, |this, radius| this.rounded_bl(radius))
                             .when_some(bottom_right, |this, radius| this.rounded_br(radius))
                     })
+                    // Body rows only: the header keeps its own fill.
+                    .when_some(
+                        style.table_row_hover().filter(|_| row_ix > 0),
+                        |this, color| this.hover(|this| this.bg(color)),
+                    )
                     .children(cells)
                     .into_any_element(),
             );
@@ -5584,6 +5637,7 @@ mod tests {
             children: vec![BlockNode::Paragraph(selected_paragraph(text))],
             spread: false,
             checked: None,
+            task_marker: None,
             span: None,
         };
         let unselected_item = BlockNode::ListItem {
@@ -5592,6 +5646,7 @@ mod tests {
             ]))],
             spread: false,
             checked: None,
+            task_marker: None,
             span: None,
         };
         let list = BlockNode::List {
@@ -5609,6 +5664,7 @@ mod tests {
             children: vec![BlockNode::Paragraph(selected_paragraph(text))],
             spread: false,
             checked: None,
+            task_marker: None,
             span: None,
         };
         let list = BlockNode::List {
@@ -5674,12 +5730,14 @@ mod tests {
                     children: vec![BlockNode::Paragraph(selected_paragraph("one"))],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
                 BlockNode::ListItem {
                     children: vec![BlockNode::Paragraph(selected_paragraph("two"))],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
             ],
@@ -5701,12 +5759,14 @@ mod tests {
                     children: vec![BlockNode::Paragraph(selected_paragraph("three"))],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
                 BlockNode::ListItem {
                     children: vec![BlockNode::Paragraph(selected_paragraph("four"))],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
             ],
@@ -5729,12 +5789,14 @@ mod tests {
                     children: vec![BlockNode::Paragraph(selected_paragraph("nested"))],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
                 BlockNode::ListItem {
                     children: vec![BlockNode::Paragraph(selected_paragraph("again"))],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
             ],
@@ -5748,12 +5810,14 @@ mod tests {
                     children: vec![BlockNode::Paragraph(selected_paragraph("three")), nested],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
                 BlockNode::ListItem {
                     children: vec![BlockNode::Paragraph(selected_paragraph("four"))],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
             ],
@@ -5775,12 +5839,14 @@ mod tests {
                     ],
                     spread: true,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
                 BlockNode::ListItem {
                     children: vec![BlockNode::Paragraph(selected_paragraph("four"))],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
             ],
@@ -5804,6 +5870,7 @@ mod tests {
                 children: vec![BlockNode::Paragraph(selected_paragraph("nested"))],
                 spread: false,
                 checked: None,
+                task_marker: None,
                 span: None,
             }],
         };
@@ -5816,12 +5883,14 @@ mod tests {
                     children: vec![BlockNode::Paragraph(selected_paragraph("one")), nested],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
                 BlockNode::ListItem {
                     children: vec![BlockNode::Paragraph(selected_paragraph("two"))],
                     spread: false,
                     checked: None,
+                    task_marker: None,
                     span: None,
                 },
             ],
@@ -5843,12 +5912,14 @@ mod tests {
                     children: vec![BlockNode::Paragraph(selected_paragraph("done"))],
                     spread: false,
                     checked: Some(true),
+                    task_marker: None,
                     span: None,
                 },
                 BlockNode::ListItem {
                     children: vec![BlockNode::Paragraph(selected_paragraph("todo"))],
                     spread: false,
                     checked: Some(false),
+                    task_marker: None,
                     span: None,
                 },
             ],
@@ -6304,12 +6375,14 @@ mod tests {
                             children: vec![BlockNode::Paragraph(selected_paragraph("one"))],
                             spread: false,
                             checked: None,
+                            task_marker: None,
                             span: None,
                         },
                         BlockNode::ListItem {
                             children: vec![BlockNode::Paragraph(selected_paragraph("two"))],
                             spread: false,
                             checked: None,
+                            task_marker: None,
                             span: None,
                         },
                     ],
