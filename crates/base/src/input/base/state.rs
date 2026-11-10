@@ -40,6 +40,7 @@ use super::{
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
+use crate::input::rope_ext::{next_grapheme_boundary, previous_grapheme_boundary};
 use crate::input::{
     InputEdit, InputExtras as _, Position, RopeExt as _, element::RIGHT_MARGIN, layout::LastLayout,
 };
@@ -2383,8 +2384,10 @@ impl<M: InputModeKind> InputBaseState<M> {
         // In multi-line mode with `submit_on_enter` enabled, a plain `Enter`
         // (without Shift) is treated as submit: propagate the action and emit
         // PressEnter without inserting a newline. `Shift+Enter` still inserts
-        // a newline.
-        let insert_newline = self.is_multi_line() && (!self.submit_on_enter || action.shift);
+        // a newline. A secondary `Enter` (Cmd/Ctrl+Enter) is always a submit
+        // gesture and never inserts a newline.
+        let insert_newline =
+            self.is_multi_line() && !action.secondary && (!self.submit_on_enter || action.shift);
 
         if insert_newline {
             if !self.selections.is_single() {
@@ -3985,12 +3988,13 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub(super) fn previous_boundary(&self, offset: usize) -> usize {
-        let offset = self.cursor_boundary(offset.saturating_sub(1), Bias::Left);
+        let offset =
+            self.cursor_boundary(previous_grapheme_boundary(&self.text, offset), Bias::Left);
         self.clamp_offset_to_visible_backward(offset)
     }
 
     pub(super) fn next_boundary(&self, offset: usize) -> usize {
-        let offset = self.cursor_boundary(offset.saturating_add(1), Bias::Right);
+        let offset = self.cursor_boundary(next_grapheme_boundary(&self.text, offset), Bias::Right);
         self.clamp_offset_to_visible_forward(offset)
     }
 
@@ -6430,7 +6434,7 @@ mod tests {
             });
 
             Self {
-                input: input.clone().unwrap(),
+                input: input.unwrap(),
                 window_handle: window,
             }
         }
@@ -8129,6 +8133,29 @@ mod tests {
                 assert_eq!(state.value(), "a");
                 state.undo(&Undo, window, cx);
                 assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_textarea_secondary_enter_does_not_insert_newline(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "hello", window, cx);
+                state.set_selection(0, 0);
+                state.enter(
+                    &Enter {
+                        secondary: true,
+                        shift: false,
+                    },
+                    window,
+                    cx,
+                );
+                assert_eq!(state.value(), "hello");
             });
         });
     }
@@ -10792,6 +10819,50 @@ mod tests {
     }
 
     #[gpui::test]
+    fn test_cursor_moves_and_deletes_whole_graphemes(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        let graphemes = ["a", "\u{267B}\u{FE0F}", "👍🏽", "👨‍👩‍👧", "🇸🇪", "e\u{301}", "b"];
+        let text = graphemes.concat();
+        let ends: Vec<usize> = graphemes
+            .iter()
+            .scan(0, |end, g| {
+                *end += g.len();
+                Some(*end)
+            })
+            .collect();
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value(text.clone(), window, cx);
+                state.set_selected_range(0..0, cx);
+                for &end in &ends {
+                    state.right(&MoveRight, window, cx);
+                    assert_eq!(state.cursor(), end);
+                }
+                for &end in ends.iter().rev().skip(1).chain([&0]) {
+                    state.left(&MoveLeft, window, cx);
+                    assert_eq!(state.cursor(), end);
+                }
+
+                state.set_selected_range(ends[3]..ends[3], cx);
+                state.backspace(&Backspace, window, cx);
+                assert_eq!(
+                    state.value(),
+                    ["a", graphemes[1], graphemes[2]].concat() + &graphemes[4..].concat()
+                );
+                state.delete(&Delete, window, cx);
+                assert_eq!(
+                    state.value(),
+                    ["a", graphemes[1], graphemes[2]].concat() + &graphemes[5..].concat()
+                );
+            });
+        });
+    }
+
+    #[gpui::test]
     fn test_editor_decorations_follow_typing(cx: &mut TestAppContext) {
         let view = InputView::<EditorMode>::new(cx);
         let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
@@ -12979,6 +13050,22 @@ impl InputBaseState<crate::input::EditorMode> {
         }
         cx.notify();
         true
+    }
+
+    /// Horizontal offset from the content area's left edge to unscrolled source text.
+    ///
+    /// Includes the laid-out gap, line numbers, folding controls, and gutter
+    /// decorations. Excludes input-frame padding, horizontal scrolling, and
+    /// text alignment. For left-aligned text, add this to the content area's
+    /// origin and the horizontal scroll offset to recover the text origin.
+    ///
+    /// Returns `None` before the first layout. Like [`Self::range_to_bounds`],
+    /// this describes the most recent layout; render again after changing
+    /// gutter settings or typography before using it to align a static view.
+    pub fn text_origin_offset(&self) -> Option<Pixels> {
+        self.last_layout
+            .as_ref()
+            .map(|layout| layout.line_number_width)
     }
 
     /// Set enable/disable line number.

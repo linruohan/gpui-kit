@@ -1700,7 +1700,7 @@ impl Paragraph {
         Vec<(Range<usize>, InlineHighlight)>,
         Vec<(Range<usize>, LinkMark)>,
     ) {
-        let mono_font = cx.theme().tokens.typography.mono.clone();
+        let mono_font = cx.theme().tokens.typography.mono;
         let background = cx.theme().tokens.colors.background;
         if let Ok(cache) = self.render_cache.0.lock()
             && let Some(cached) = cache.as_ref()
@@ -2637,7 +2637,7 @@ impl CodeBlock {
                     .absolute()
                     .top(px(7.))
                     .right_3()
-                    .font_family(cx.theme().tokens.typography.sans.clone())
+                    .font_family(cx.theme().tokens.typography.sans)
                     .text_size(cx.theme().tokens.typography.xs.size)
                     .line_height(px(16.))
                     .text_color(style.muted_foreground())
@@ -2657,7 +2657,7 @@ impl CodeBlock {
             .bg(style.code_background())
             .border_1()
             .border_color(style.border())
-            .font_family(cx.theme().tokens.typography.mono.clone())
+            .font_family(cx.theme().tokens.typography.mono)
             .text_size(cx.theme().tokens.typography.mono_md.size)
             .line_height(relative(1.6))
             .relative()
@@ -2882,7 +2882,7 @@ fn mark_highlight(mark: &TextMark, node_cx: &NodeContext, cx: &App) -> InlineHig
                 .text
                 .font_family
                 .clone()
-                .unwrap_or_else(|| cx.theme().tokens.typography.mono.clone()),
+                .unwrap_or_else(|| cx.theme().tokens.typography.mono),
         );
     }
     if let Some(color) = mark.highlight {
@@ -3519,7 +3519,7 @@ fn measure_table_columns(
 ) -> Vec<f32> {
     let text_styles = TableTextStyles::new(&node_cx.style, window);
     let rem_size = window.rem_size();
-    let mono_family = cx.theme().tokens.typography.mono.clone();
+    let mono_family = cx.theme().tokens.typography.mono;
     let inline_code = node_cx.style.inline_code_highlight();
     let cached = table.column_widths_cache.0.lock().ok().and_then(|cache| {
         cache
@@ -3987,7 +3987,8 @@ impl BlockNode {
                         for (child_ix, child) in children.iter().enumerate() {
                             match child {
                                 BlockNode::Paragraph { .. } => {
-                                    let last_not_list = child_ix > 0
+                                    let continuation = child_ix > 0;
+                                    let last_not_list = continuation
                                         && !matches!(
                                             children[child_ix - 1],
                                             BlockNode::List { .. }
@@ -4021,6 +4022,21 @@ impl BlockNode {
                                             );
                                             continue;
                                         }
+                                    }
+
+                                    // A paragraph after a nested sub-list still
+                                    // belongs to this item: it takes no marker of
+                                    // its own, but lines up with the item's text.
+                                    if continuation {
+                                        items.push(
+                                            div()
+                                                .w_full()
+                                                .min_w_0()
+                                                .pl(indent)
+                                                .overflow_hidden()
+                                                .child(text),
+                                        );
+                                        continue;
                                     }
 
                                     items.push(Self::render_list_item_row(
@@ -6469,6 +6485,10 @@ mod tests {
         );
         let data = table.cached_table_data();
 
+        #[expect(
+            clippy::redundant_clone,
+            reason = "This test verifies that cloning a table shares its cached snapshot"
+        )]
         let cloned = table.clone();
         assert!(Arc::ptr_eq(&data, &cloned.cached_table_data()));
     }
