@@ -88,7 +88,7 @@ pub(crate) fn days_in_month(year: i32, month: u32, first_day: Weekday) -> Vec<Ve
 
 pub fn get_holiday_by_tyme4rs(date: NaiveDate) -> String {
     use tyme4rs::tyme::{
-        holiday::LEGAL_HOLIDAY_NAMES, lunar::LUNAR_DAY_NAMES, solar::SolarDay, Culture,
+        Culture, holiday::LEGAL_HOLIDAY_NAMES, lunar::LUNAR_DAY_NAMES, solar::SolarDay,
     };
 
     let solar_day = SolarDay::from_ymd(

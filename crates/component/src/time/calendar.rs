@@ -122,10 +122,9 @@ impl RenderOnce for Calendar {
                             let flag = holiday_parts.get(2).unwrap_or(&"").to_string();
 
                             let jieqi_list: &[&str] = &[
-                                "冬至", "小寒", "大寒", "立春", "雨水", "惊蛰",
-                                "春分", "清明", "谷雨", "立夏", "小满", "芒种",
-                                "夏至", "小暑", "大暑", "立秋", "处暑", "白露",
-                                "秋分", "寒露", "霜降", "立冬", "小雪", "大雪",
+                                "冬至", "小寒", "大寒", "立春", "雨水", "惊蛰", "春分", "清明",
+                                "谷雨", "立夏", "小满", "芒种", "夏至", "小暑", "大暑", "立秋",
+                                "处暑", "白露", "秋分", "寒露", "霜降", "立冬", "小雪", "大雪",
                             ];
                             let is_jieqi = jieqi_list.contains(&holiday.as_str());
 
@@ -160,16 +159,14 @@ impl RenderOnce for Calendar {
                                             .when(holiday.len() > 6 && !is_jieqi, |this| {
                                                 this.text_color(green())
                                             })
-                                            .when(flag == "班", |this| {
-                                                this.text_color(red())
-                                            }),
+                                            .when(flag == "班", |this| this.text_color(red())),
                                     ),
                             )
                         } else {
                             item
                         }
                     }
-                        .child(Icon::new(end_chevron(cx)).size_4()),
+                    .child(Icon::new(end_chevron(cx)).size_4()),
                     _ => item,
                 };
                 item.map(|this| match size {
