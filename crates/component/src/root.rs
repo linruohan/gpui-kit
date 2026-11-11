@@ -172,7 +172,9 @@ impl WindowState {
         window: &Window,
         cx: &App,
     ) -> Option<impl IntoElement + use<>> {
-        let active_sheet_placement = root.read(cx).active_sheet.clone().map(|d| d.placement);
+        let active_sheet_placement = root.read(cx).active_sheet.clone().map(|d| {
+            crate::sheet::physical_placement(d.placement, gpui_base::LayoutDirection::global(cx))
+        });
 
         let sheet_size = root.read(cx).sheet_size;
         let (mt, mr, mb, ml) = match active_sheet_placement {
@@ -215,7 +217,10 @@ impl WindowState {
             let mut sheet = Sheet::new(window, cx);
             sheet = (active_sheet.builder)(sheet, window, cx);
             sheet.focus_handle = active_sheet.focus_handle.clone();
-            sheet.placement = active_sheet.placement;
+            sheet.placement = crate::sheet::physical_placement(
+                active_sheet.placement,
+                gpui_base::LayoutDirection::global(cx),
+            );
             sheet.selection_scope = active_sheet.selection_scope;
 
             let size = sheet.size;
@@ -243,6 +248,7 @@ impl WindowState {
         }
 
         let mut rendered: Vec<(usize, Dialog)> = Vec::with_capacity(active_dialogs.len());
+        let mut stack_depth = 0;
 
         for (index, active_dialog) in active_dialogs.iter().enumerate() {
             let mut dialog = Dialog::new(cx);
@@ -257,6 +263,11 @@ impl WindowState {
             dialog.selection_scope = active_dialog.selection_scope;
 
             dialog.layer_ix = index;
+            // A dialog that is leaving must not push the next one down.
+            dialog.stack_depth = stack_depth;
+            if !active_dialog.closing {
+                stack_depth += 1;
+            }
             dialog.id = active_dialog.id;
 
             // Refreshed every frame so closing decides in one step whether an
@@ -729,6 +740,11 @@ impl gpui_base::RootPlugin for WindowState {
                 .rounded_bl(radii.bottom_left)
                 .rounded_br(radii.bottom_right),
         );
+        // Text starts on the right in a right-to-left interface; elements
+        // that set their own alignment keep it.
+        if gpui_base::LayoutDirection::global(cx).is_rtl() {
+            surface.style().text.text_align = Some(gpui::TextAlign::Right);
+        }
     }
 
     fn decorate(
