@@ -3429,7 +3429,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         let margin = visible_display_rows.len();
         let shaped_display_rows = visible_display_rows.start.saturating_sub(margin)
             ..visible_display_rows.end.saturating_add(margin);
-        let mut lines = Self::layout_lines(
+        let lines = Self::layout_lines(
             &state,
             &display_text,
             &last_layout,
