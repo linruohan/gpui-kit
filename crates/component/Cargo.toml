@@ -154,7 +154,7 @@ tyme4rs = { git = "https://github.com/linruohan/tyme4rs.git" }
 num-traits = "0.2"
 
 # Calendar
-chrono = "0.4.38"
+jiff = "1.0"
 
 # Code Editor
 lsp-types.workspace = true

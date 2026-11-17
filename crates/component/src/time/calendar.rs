@@ -4,6 +4,7 @@ use gpui::{
     SharedString, StyleRefinement, Styled, TextAlign, Window, blue, div, green,
     prelude::FluentBuilder as _, px, red,
 };
+use jiff::civil::Weekday;
 use rust_i18n::t;
 
 use crate::time::utils::get_holiday_by_tyme4rs;
@@ -287,12 +288,11 @@ fn end_chevron(cx: &App) -> IconName {
 #[cfg(test)]
 mod tests {
     use super::{CalendarItemKind, Date, uses_compact_text};
-    use chrono::NaiveDate;
 
     #[test]
     fn date_display_is_stable() {
         assert_eq!(
-            Date::Single(Some(NaiveDate::from_ymd_opt(2024, 8, 3).unwrap())).to_string(),
+            Date::Single(Some(jiff::civil::date(2024, 8, 3))).to_string(),
             "2024-08-03"
         );
         assert_eq!(Date::Single(None).to_string(), "nil");
