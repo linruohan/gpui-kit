@@ -196,7 +196,7 @@ impl CalendarState {
             today,
             number_of_months: 1,
             disabled_matcher: None,
-            first_day_of_week: Weekday::Mon,
+            first_day_of_week: Weekday::Monday,
         }
         .year_range((i32::from(today.year()) - 50, i32::from(today.year()) + 50))
     }
@@ -431,7 +431,7 @@ pub struct CalendarItemState {
     disabled: bool,
     today: bool,
     /// The concrete date represented by this item, set only on Day items.
-    date: Option<NaiveDate>,
+    date: Option<civil::Date>,
 }
 
 impl CalendarItemState {
@@ -477,7 +477,7 @@ impl CalendarItemState {
     }
 
     /// Associate this item with a specific calendar date (used by Day items).
-    pub fn with_date(mut self, date: Option<NaiveDate>) -> Self {
+    pub fn with_date(mut self, date: Option<civil::Date>) -> Self {
         self.date = date;
         self
     }
@@ -507,7 +507,7 @@ impl CalendarItemState {
     }
 
     /// Returns the concrete date for this item, set only on Day items.
-    pub fn date(&self) -> Option<NaiveDate> {
+    pub fn date(&self) -> Option<civil::Date> {
         self.date
     }
 }
@@ -598,7 +598,7 @@ impl Calendar {
             id: id.into(),
             state: state.clone(),
             number_of_months: 1,
-            first_day_of_week: Weekday::Mon,
+            first_day_of_week: Weekday::Monday,
             style: StyleRefinement::default(),
             item: Rc::new(|item, _, _, _| item.into_any_element()),
             label: Rc::new(|kind, value| match kind {

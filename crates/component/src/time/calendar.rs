@@ -1,4 +1,3 @@
-use chrono::{Datelike, Weekday};
 use gpui::{
     App, ElementId, Entity, InteractiveElement, IntoElement, ParentElement, RenderOnce,
     SharedString, StyleRefinement, Styled, TextAlign, Window, blue, div, green,
@@ -56,7 +55,7 @@ impl Calendar {
             state: state.clone(),
             style: StyleRefinement::default(),
             number_of_months: 1,
-            first_day_of_week: Weekday::Mon,
+            first_day_of_week: Weekday::Monday,
         }
     }
     pub fn number_of_months(mut self, count: usize) -> Self {
