@@ -159,7 +159,7 @@ impl RenderOnce for Calendar {
                         .child(Icon::new(start_chevron(cx)).size_4()),
                     CalendarItemKind::Next => item
                         .clear_children()
-                        .child(Icon::new(IconName::ChevronRight).size_4()),
+                        .child(Icon::new(end_chevron(cx)).size_4()),
                     CalendarItemKind::Day => {
                         if let Some(date) = state.date() {
                             // get_holiday_by_tyme4rs returns "{day} {name} [{休|班}]"
@@ -214,7 +214,6 @@ impl RenderOnce for Calendar {
                             item
                         }
                     }
-                    .child(Icon::new(end_chevron(cx)).size_4()),
                     _ => item,
                 };
                 item.map(|this| match size {
