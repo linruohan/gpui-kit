@@ -23,6 +23,8 @@ pub struct SettingGroup {
     pub(super) title: Option<SharedString>,
     pub(super) description: Option<SharedString>,
     pub(super) items: Vec<SettingItem>,
+    /// When false, a titled group stays in the page and is omitted from the sidebar.
+    pub(super) in_nav: bool,
 }
 
 impl Styled for SettingGroup {
@@ -41,7 +43,17 @@ impl SettingGroup {
             title: None,
             description: None,
             items: Vec::new(),
+            in_nav: true,
         }
+    }
+
+    /// Show this group as a sidebar entry under its page.
+    ///
+    /// Defaults to true. Set false when the title is only a heading inside the
+    /// page and the sidebar should keep a single entry for the page.
+    pub fn in_nav(mut self, in_nav: bool) -> Self {
+        self.in_nav = in_nav;
+        self
     }
 
     /// Set the label of the setting group, default is None.

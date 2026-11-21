@@ -29,6 +29,8 @@ pub struct SettingPage {
     pub(super) description: Option<SharedString>,
     pub(super) groups: Vec<SettingGroup>,
     pub(super) header_style: StyleRefinement,
+    /// Sidebar section label. Consecutive pages with the same label share one group.
+    pub(super) section: Option<SharedString>,
 }
 
 impl SettingPage {
@@ -42,7 +44,17 @@ impl SettingPage {
             description: None,
             groups: Vec::new(),
             header_style: StyleRefinement::default(),
+            section: None,
         }
+    }
+
+    /// Group this page under a sidebar section heading.
+    ///
+    /// Pages without a section stay in the flat menu. Once any page sets a
+    /// section, the sidebar groups consecutive pages that share a label.
+    pub fn section(mut self, section: impl Into<SharedString>) -> Self {
+        self.section = Some(section.into());
+        self
     }
 
     /// Set the title of the setting page.
@@ -252,11 +264,13 @@ impl SettingPage {
                         h_flex()
                             .flex_row_dir(cx)
                             .justify_between()
+                            .items_center()
                             .child(
                                 h_flex()
                                     .flex_row_dir(cx)
-                                    .gap_1()
-                                    .child(self.title.clone())
+                                    .gap_2()
+                                    .items_center()
+                                    .child(Label::new(self.title.clone()).text_xl().font_semibold())
                                     .when_some(self.title_suffix.clone(), |this, suffix| {
                                         this.child(suffix(window, cx))
                                     }),
