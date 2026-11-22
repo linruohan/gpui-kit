@@ -1119,6 +1119,7 @@ fn parse_paragraph(
                 url: "".into(),
                 title: link.label.clone().map(Into::into),
                 identifier: Some(link.identifier.clone().into()),
+                ..Default::default()
             };
 
             text = merge_children_with_mark(
@@ -1152,6 +1153,7 @@ fn collect_definitions(node: &Node, definitions: &mut BTreeMap<String, LinkMark>
                 url: def.url.clone().into(),
                 identifier: Some(def.identifier.clone().into()),
                 title: def.title.clone().map(Into::into),
+                ..Default::default()
             });
     }
     if let Some(children) = node.children() {
@@ -1210,12 +1212,13 @@ fn blockquote_to_node(
     }
 }
 
-/// Removes the marker line that names a registered block surface from the
-/// start of `quote`, and returns that name.
+/// Removes the marker that names a registered block surface from the start of
+/// `quote`, and returns that name.
 ///
-/// As in a GitHub alert, the marker `[!name]` is alone on the first line of
-/// the first paragraph, and the lines after it are that paragraph's text. The
-/// name matches ASCII-case-insensitively.
+/// GitHub alerts put `[!name]` alone on the first line. Obsidian also allows
+/// `[!name] Title` (and a fold `+` / `-` after the marker) on that line. The
+/// name matches ASCII-case-insensitively. A title stays as the paragraph's
+/// text; lines after the marker are that paragraph's remaining text.
 fn take_surface_marker(
     source: &str,
     quote: &mut mdast::Blockquote,
@@ -1238,13 +1241,21 @@ fn take_surface_marker(
     if source.get(..start)?.ends_with('\\') || !source.get(start..)?.starts_with(line) {
         return None;
     }
-    let name = line.strip_prefix("[!")?.strip_suffix(']')?;
-    let name = cx.markdown_extensions.block_surface_name(name)?;
-    match rest {
-        // The next line goes on in this text, which starts after the line's
-        // blockquote marker in the source.
-        Some(rest) => {
-            let rest = rest.to_string();
+    let (written, title) = parse_alert_marker(line)?;
+    let name = cx.markdown_extensions.block_surface_name(written)?;
+    let title_skip = title.map(|_| alert_title_offset(line, written));
+    let title = title.map(str::to_string);
+    let rest = rest.map(str::to_string);
+    match (title, rest) {
+        (Some(title), Some(rest)) => {
+            advance_text_start(text, title_skip?)?;
+            text.value = format!("{title}\n{rest}");
+        }
+        (Some(title), None) => {
+            advance_text_start(text, title_skip?)?;
+            text.value = title;
+        }
+        (None, Some(rest)) => {
             let position = text.position.as_mut()?;
             let line_start =
                 source[position.start.offset..].find('\n')? + position.start.offset + 1;
@@ -1259,7 +1270,7 @@ fn take_surface_marker(
             }
         }
         // The marker ends the paragraph or a hard break ends its line.
-        None => match paragraph.children.get(1) {
+        (None, None) => match paragraph.children.get(1) {
             None => {
                 paragraph.children.clear();
             }
@@ -1283,6 +1294,45 @@ fn take_surface_marker(
         }
     }
     Some(name)
+}
+
+/// `[!name]`, optionally a fold `+`/`-`, then an optional title.
+fn parse_alert_marker(line: &str) -> Option<(&str, Option<&str>)> {
+    let rest = line.strip_prefix("[!")?;
+    let close = rest.find(']')?;
+    let name = &rest[..close];
+    if name.is_empty() {
+        return None;
+    }
+    let mut after = rest[close + 1..].trim();
+    after = after
+        .strip_prefix('+')
+        .or_else(|| after.strip_prefix('-'))
+        .unwrap_or(after)
+        .trim();
+    Some((name, if after.is_empty() { None } else { Some(after) }))
+}
+
+fn alert_title_offset(line: &str, written: &str) -> usize {
+    let mut i = 2 + written.len() + 1;
+    let bytes = line.as_bytes();
+    while i < bytes.len() && matches!(bytes[i], b' ' | b'\t') {
+        i += 1;
+    }
+    if i < bytes.len() && matches!(bytes[i], b'+' | b'-') {
+        i += 1;
+        while i < bytes.len() && matches!(bytes[i], b' ' | b'\t') {
+            i += 1;
+        }
+    }
+    i
+}
+
+fn advance_text_start(text: &mut mdast::Text, bytes: usize) -> Option<()> {
+    let position = text.position.as_mut()?;
+    position.start.offset += bytes;
+    position.start.column += bytes;
+    Some(())
 }
 
 fn new_span(pos: Option<markdown::unist::Position>, cx: &NodeContext) -> Option<Span> {

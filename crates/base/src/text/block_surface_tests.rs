@@ -63,6 +63,8 @@ fn a_registered_marker_alone_on_the_first_line_makes_a_surface() {
         ("> [!summary]\nlazy", "lazy"),
         ("> [!summary]\n> - one\n> - two", "- one\n- two"),
         ("> [!summary]", ""),
+        ("> [!summary] Title\n> one", "Title one"),
+        ("> [!summary]+ Folded\n> body", "Folded body"),
     ] {
         assert_eq!(
             surface(source),
@@ -86,7 +88,6 @@ fn a_registered_marker_alone_on_the_first_line_makes_a_surface() {
 fn anything_else_parses_as_it_does_without_a_registration() {
     for source in [
         "> [!other]\n> one",
-        "> [!summary] Title\n> one",
         "> [!summary]*one*",
         "> [!summary\n> one",
         "> \\[!summary]\n> one",

@@ -406,6 +406,7 @@ pub(super) fn resolve_component_style(
     let heading_font_size = legacy.heading_font_size;
     let heading = legacy.heading.clone();
     let link = legacy.link;
+    let unresolved_link = legacy.unresolved_link;
     // A style that never touched heading sizes keeps the Base default, which
     // scales headings with the body text; only an explicit base size or
     // resolver pins them to pixels.
@@ -446,6 +447,9 @@ pub(super) fn resolve_component_style(
         .with_dark(is_dark);
     if let Some(link) = link {
         style = style.with_link(link);
+    }
+    if let Some(unresolved_link) = unresolved_link {
+        style = style.with_unresolved_link(unresolved_link);
     }
     if let Some(border) = legacy.border {
         style = style.with_border(border);

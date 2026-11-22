@@ -832,6 +832,8 @@ pub struct LinkMark {
     /// Optional identifier for footnotes.
     pub identifier: Option<SharedString>,
     pub title: Option<SharedString>,
+    /// Draw with the view's unresolved-link color.
+    pub unresolved: bool,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -1827,9 +1829,9 @@ impl Paragraph {
                 let mut highlight = mark_highlight(style, node_cx, cx);
                 if let Some(link_mark) = style.link.clone() {
                     let link = node_cx.link(&link_mark, cx);
-                    if link.is_some() {
-                        highlight.style.color = Some(node_cx.style.link());
-                        highlight.style.underline = Some(link_underline(&node_cx.style));
+                    if let Some(link) = &link {
+                        highlight.style.color = Some(link_color(&node_cx.style, link));
+                        highlight.style.underline = Some(link_underline(&node_cx.style, link));
                     }
                     links.push((inner_range.clone(), link_mark));
                     replaced.push(link);
@@ -2892,6 +2894,7 @@ impl NodeContext {
             &Link {
                 url: resolved.url.clone(),
                 title: resolved.title.clone(),
+                unresolved: resolved.unresolved,
             },
             cx,
         )?;
@@ -2899,6 +2902,7 @@ impl NodeContext {
             url: replaced.url,
             identifier: None,
             title: replaced.title,
+            unresolved: replaced.unresolved,
         })
     }
 
@@ -3172,6 +3176,7 @@ impl Paragraph {
                     img(node_cx.image_source(image))
                         .id(ix)
                         .object_fit(ObjectFit::Contain)
+                        .rounded(px(6.))
                         .max_w(relative(1.))
                         .when_some(image.width, |this, width| this.w(width))
                         .when_some(image_link, |this, link| {
@@ -3194,8 +3199,8 @@ impl Paragraph {
                     if let Some(link_mark) = style.link.as_ref()
                         && let Some(link) = node_cx.link(link_mark, cx)
                     {
-                        highlight.style.color = Some(node_cx.style.link());
-                        highlight.style.underline = Some(link_underline(&node_cx.style));
+                        highlight.style.color = Some(link_color(&node_cx.style, &link));
+                        highlight.style.underline = Some(link_underline(&node_cx.style, &link));
                         links.push((inner_range.clone(), link));
                     }
 
@@ -3340,9 +3345,9 @@ impl Paragraph {
                 for (_, mark) in &child.marks {
                     object_style = object_style.highlight(mark_highlight(mark, node_cx, cx).style);
                     if let Some(link) = mark.link.as_ref().and_then(|link| node_cx.link(link, cx)) {
+                        object_style.color = Some(link_color(&node_cx.style, &link));
+                        object_style.underline = Some(link_underline(&node_cx.style, &link));
                         object_link = Some(link);
-                        object_style.color = Some(node_cx.style.link());
-                        object_style.underline = Some(link_underline(&node_cx.style));
                     }
                 }
                 let rendered_node = node.clone();
@@ -3464,8 +3469,8 @@ impl Paragraph {
                 if let Some(link_mark) = &style.link {
                     let link = node_cx.link(link_mark, cx);
                     if let Some(link) = &link {
-                        highlight.style.color = Some(node_cx.style.link());
-                        highlight.style.underline = Some(link_underline(&node_cx.style));
+                        highlight.style.color = Some(link_color(&node_cx.style, link));
+                        highlight.style.underline = Some(link_underline(&node_cx.style, link));
                         links.push((inner_range.clone(), link.clone()));
                     }
                     written.push((link_mark.clone(), link));
@@ -3502,12 +3507,20 @@ fn block_element_id(kind: &'static str, span: Option<Span>, ix: usize) -> Elemen
     (kind, span.map_or(ix, |span| span.start)).into()
 }
 
+fn link_color(style: &TextViewStyle, link: &LinkMark) -> Hsla {
+    if link.unresolved {
+        style.unresolved_link()
+    } else {
+        style.link()
+    }
+}
+
 /// A link's underline: a hairline in a translucent link color, so a run of
 /// links reads as text first and as links second.
-fn link_underline(style: &TextViewStyle) -> gpui::UnderlineStyle {
+fn link_underline(style: &TextViewStyle, link: &LinkMark) -> gpui::UnderlineStyle {
     gpui::UnderlineStyle {
         thickness: px(1.),
-        color: Some(style.link().opacity(0.4)),
+        color: Some(link_color(style, link).opacity(0.4)),
         ..Default::default()
     }
 }

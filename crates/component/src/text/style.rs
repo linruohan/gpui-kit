@@ -29,6 +29,8 @@ pub struct TextViewStyle {
     pub heading: Option<Arc<dyn Fn(u8) -> StyleRefinement + Send + Sync + 'static>>,
     /// Markdown link color. `None` keeps the theme link color.
     pub link: Option<Hsla>,
+    /// Color for destinations marked unresolved. `None` fades the link color.
+    pub unresolved_link: Option<Hsla>,
     /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
     pub highlight_theme: Arc<HighlightTheme>,
     /// The style refinement for code blocks.
@@ -86,6 +88,7 @@ impl Default for TextViewStyle {
             heading_font_size: None,
             heading: None,
             link: None,
+            unresolved_link: None,
             highlight_theme: HighlightTheme::default_light(),
             code_block: StyleRefinement::default(),
             table: StyleRefinement::default(),
@@ -122,6 +125,7 @@ impl PartialEq for TextViewStyle {
                 _ => false,
             }
             && self.link == other.link
+            && self.unresolved_link == other.unresolved_link
             && self.highlight_theme == other.highlight_theme
             && self.code_block == other.code_block
             && self.table == other.table
@@ -165,6 +169,11 @@ impl TextViewStyle {
     /// Set the Markdown link color.
     pub fn link(mut self, color: Hsla) -> Self {
         self.link = Some(color);
+        self
+    }
+    /// Set the color of destinations marked unresolved.
+    pub fn unresolved_link(mut self, color: Hsla) -> Self {
+        self.unresolved_link = Some(color);
         self
     }
     /// Set style for code blocks.

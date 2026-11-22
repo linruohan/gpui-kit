@@ -122,6 +122,8 @@ pub struct Link {
     pub url: SharedString,
     /// The Markdown link title, `[text](url "title")`.
     pub title: Option<SharedString>,
+    /// Draw with [`TextViewStyle`]'s unresolved-link color.
+    pub unresolved: bool,
 }
 
 impl Link {
@@ -130,6 +132,7 @@ impl Link {
         Self {
             url: url.into(),
             title: None,
+            unresolved: false,
         }
     }
 
@@ -142,6 +145,12 @@ impl Link {
     /// Set the link title.
     pub fn title(mut self, title: impl Into<SharedString>) -> Self {
         self.title = Some(title.into());
+        self
+    }
+
+    /// Draw this destination as an unresolved link.
+    pub fn unresolved(mut self, unresolved: bool) -> Self {
+        self.unresolved = unresolved;
         self
     }
 }

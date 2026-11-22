@@ -15,6 +15,7 @@ pub struct TextViewStyle {
     foreground: Hsla,
     muted_foreground: Hsla,
     link: Hsla,
+    unresolved_link: Option<Hsla>,
     selection: Hsla,
     code_background: Hsla,
     border: Hsla,
@@ -47,6 +48,7 @@ impl PartialEq for TextViewStyle {
             && self.foreground == other.foreground
             && self.muted_foreground == other.muted_foreground
             && self.link == other.link
+            && self.unresolved_link == other.unresolved_link
             && self.selection == other.selection
             && self.code_background == other.code_background
             && self.border == other.border
@@ -91,6 +93,7 @@ impl TextViewStyle {
             foreground: colors.foreground,
             muted_foreground: colors.muted_foreground,
             link: colors.primary,
+            unresolved_link: None,
             selection: colors.selection,
             code_background: colors.accent,
             border: colors.border,
@@ -128,6 +131,12 @@ impl TextViewStyle {
     /// Sets the link text color.
     pub fn with_link(mut self, color: Hsla) -> Self {
         self.link = color;
+        self
+    }
+
+    /// Sets the color of destinations the application marks unresolved.
+    pub fn with_unresolved_link(mut self, color: Hsla) -> Self {
+        self.unresolved_link = Some(color);
         self
     }
 
@@ -289,6 +298,12 @@ impl TextViewStyle {
         self.link
     }
 
+    /// The color of destinations marked unresolved, or a faded link color.
+    pub fn unresolved_link(&self) -> Hsla {
+        self.unresolved_link
+            .unwrap_or_else(|| self.link.opacity(0.5))
+    }
+
     /// The background painted behind selected text.
     pub fn selection(&self) -> Hsla {
         self.selection
@@ -401,6 +416,7 @@ impl TextViewStyle {
         let mut style = style
             .with_muted_foreground(color.opacity(0.7))
             .with_link(color)
+            .with_unresolved_link(color.opacity(0.5))
             .with_selection(color.opacity(0.25))
             .with_code_background(code_background)
             .with_border(color.opacity(0.2))
