@@ -90,6 +90,8 @@ impl RenderContext {
     }
 
     /// Resolves document image URIs. The host owns resource access policy.
+    /// A `data:` URL whose body is an image is decoded inline and does not
+    /// reach this resolver.
     pub fn with_image_source<F>(mut self, resolver: F) -> Self
     where
         F: Fn(&SharedUri) -> ImageSource + Send + Sync + 'static,

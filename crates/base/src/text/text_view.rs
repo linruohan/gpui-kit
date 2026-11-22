@@ -404,11 +404,13 @@ impl TextView {
         }
     }
 
-    /// Overrides the source of every document image, including embedded data URLs.
+    /// Overrides how document image URIs are loaded.
     ///
     /// Used for both rendering and intrinsic-size measurement. The returned source
-    /// is authoritative: pending or failed loads never fall back to the document URL.
-    /// Without this override, images use Base's default URI and data URL handling.
+    /// is authoritative for that URI: pending or failed loads never fall back to
+    /// the document URL. A `data:` URL whose body is an image is decoded inline
+    /// and does not reach this resolver. Without this override, other images use
+    /// Base's default URI handling.
     pub fn image_source<F>(mut self, resolver: F) -> Self
     where
         F: Fn(&gpui::SharedUri) -> gpui::ImageSource + Send + Sync + 'static,

@@ -2912,6 +2912,16 @@ impl NodeContext {
     }
 
     fn image_source(&self, image: &ImageNode) -> ImageSource {
+        // A decodable `data:` image is the bytes themselves. A host resolver
+        // maps paths and remote names; handing it the data URL makes GPUI
+        // fetch that URL over HTTP and log a load failure.
+        if let Some(decoded) = image
+            .embedded
+            .get_or_init(|| data_url_image(&image.url))
+            .as_ref()
+        {
+            return ImageSource::Image(decoded.clone());
+        }
         match &self.image_source {
             Some(resolve) => resolve(&image.url),
             None => image.source(),
@@ -6972,6 +6982,55 @@ mod tests {
             panic!("expected an embedded image");
         };
         assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    /// A host resolver maps paths. It must not replace an embedded image with
+    /// a URI, or GPUI fetches the data URL over HTTP and the load fails.
+    #[test]
+    fn custom_image_source_keeps_embedded_data_urls() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        use gpui::{ImageFormat, ImageSource, SharedUri};
+
+        fn image_node(url: &str) -> ImageNode {
+            ImageNode {
+                url: url.into(),
+                ..Default::default()
+            }
+        }
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        let mut node_cx = NodeContext::default();
+        node_cx.image_source = Some(Arc::new(move |_| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            SharedUri::from("resolver-was-called").into()
+        }));
+
+        let node = image_node("data:image/png;base64,iVBORw0KGgo=");
+        let ImageSource::Image(image) = node_cx.image_source(&node) else {
+            panic!("expected an embedded image");
+        };
+        assert_eq!(image.format(), ImageFormat::Png);
+        assert_eq!(image.bytes(), b"\x89PNG\r\n\x1a\n");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+        match node_cx.image_source(&image_node("./shot.png")) {
+            ImageSource::Resource(gpui::Resource::Uri(uri)) => {
+                assert_eq!(uri.as_ref(), "resolver-was-called");
+            }
+            _ => panic!("expected the resolver's URI"),
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        match node_cx.image_source(&image_node("data:text/plain;base64,aGVsbG8=")) {
+            ImageSource::Resource(gpui::Resource::Uri(uri)) => {
+                assert_eq!(uri.as_ref(), "resolver-was-called");
+            }
+            _ => panic!("expected a non-image data URL to reach the resolver"),
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 
     /// Images with nothing between them share a line, as a browser draws
