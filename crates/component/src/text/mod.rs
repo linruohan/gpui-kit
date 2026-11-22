@@ -518,4 +518,42 @@ mod tests {
             StyleRefinement::default().text_size(px(20.))
         );
     }
+
+    #[test]
+    fn heading_and_link_refinements_fold_onto_the_theme() {
+        let theme = Theme::default();
+        let accent = gpui::hsla(0.75, 0.65, 0.58, 1.);
+        let style = super::compat::resolve_component_style(
+            &theme,
+            super::TextViewStyle::default()
+                .heading(move |_| StyleRefinement::default().text_color(accent))
+                .link(accent),
+        );
+
+        assert_eq!(style.heading(1).text.color, Some(accent));
+        assert_eq!(style.link(), accent);
+    }
+
+    #[test]
+    fn list_quote_and_rule_refinements_fold_onto_the_theme() {
+        let theme = Theme::default();
+        let gold = gpui::hsla(0.1, 1., 0.5, 1.);
+        let style = super::compat::resolve_component_style(
+            &theme,
+            super::TextViewStyle::default()
+                .list(StyleRefinement::default().text_color(gold))
+                .blockquote(StyleRefinement::default().border_color(gold))
+                .border(gold)
+                .selection(gold)
+                .code_background(gold)
+                .table_row_hover(gold),
+        );
+
+        assert_eq!(style.list_style().text.color, Some(gold));
+        assert_eq!(style.blockquote_style().border.color, Some(gold.into()));
+        assert_eq!(style.border(), gold);
+        assert_eq!(style.selection(), gold);
+        assert_eq!(style.code_background(), gold);
+        assert_eq!(style.table_row_hover(), Some(gold));
+    }
 }

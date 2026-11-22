@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpui::{HighlightStyle, Pixels, Rems, StyleRefinement, px, rems};
+use gpui::{HighlightStyle, Hsla, Pixels, Rems, StyleRefinement, px, rems};
 
 use crate::highlighter::HighlightTheme;
 
@@ -23,6 +23,12 @@ pub struct TextViewStyle {
     /// The first parameter is the heading level (1-6), the second parameter is
     /// the base font size.
     pub heading_font_size: Option<Arc<dyn Fn(u8, Pixels) -> Pixels + Send + Sync + 'static>>,
+    /// Extra heading refinements (color, weight, border, padding) for levels
+    /// 1–6. Folded onto the size the theme or [`Self::heading_font_size`] already
+    /// chose. `None` leaves heading appearance to the theme.
+    pub heading: Option<Arc<dyn Fn(u8) -> StyleRefinement + Send + Sync + 'static>>,
+    /// Markdown link color. `None` keeps the theme link color.
+    pub link: Option<Hsla>,
     /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
     pub highlight_theme: Arc<HighlightTheme>,
     /// The style refinement for code blocks.
@@ -54,6 +60,20 @@ pub struct TextViewStyle {
     /// Default is [`HighlightStyle::default()`], the `background_color` will
     /// fallback to `cx.theme().accent`, if it is `None`.
     pub inline_code: HighlightStyle,
+    /// Box presentation for inline code (padding, radius, border, font).
+    pub inline_code_box: StyleRefinement,
+    /// Style refinement for bullet / numbered list markers.
+    pub list: StyleRefinement,
+    /// Style refinement for blockquote containers.
+    pub blockquote: StyleRefinement,
+    /// Horizontal-rule and table-frame border color. `None` keeps the theme.
+    pub border: Option<Hsla>,
+    /// Selected-text wash. `None` keeps the theme.
+    pub selection: Option<Hsla>,
+    /// Fenced code block fill. `None` keeps the theme.
+    pub code_background: Option<Hsla>,
+    /// Hovered table body row. `None` keeps the theme.
+    pub table_row_hover: Option<Hsla>,
     /// Whether content-specific rendering should use dark-mode assets.
     pub is_dark: bool,
 }
@@ -64,12 +84,21 @@ impl Default for TextViewStyle {
             paragraph_gap: rems(0.75),
             heading_base_font_size: px(14.),
             heading_font_size: None,
+            heading: None,
+            link: None,
             highlight_theme: HighlightTheme::default_light(),
             code_block: StyleRefinement::default(),
             table: StyleRefinement::default(),
             table_head: StyleRefinement::default(),
             table_cell: StyleRefinement::default(),
             inline_code: HighlightStyle::default(),
+            inline_code_box: StyleRefinement::default(),
+            list: StyleRefinement::default(),
+            blockquote: StyleRefinement::default(),
+            border: None,
+            selection: None,
+            code_background: None,
+            table_row_hover: None,
             is_dark: false,
         }
     }
@@ -87,12 +116,25 @@ impl PartialEq for TextViewStyle {
                 (None, None) => true,
                 _ => false,
             }
+            && match (&self.heading, &other.heading) {
+                (Some(left), Some(right)) => (1..=6).all(|level| left(level) == right(level)),
+                (None, None) => true,
+                _ => false,
+            }
+            && self.link == other.link
             && self.highlight_theme == other.highlight_theme
             && self.code_block == other.code_block
             && self.table == other.table
             && self.table_head == other.table_head
             && self.table_cell == other.table_cell
             && self.inline_code == other.inline_code
+            && self.inline_code_box == other.inline_code_box
+            && self.list == other.list
+            && self.blockquote == other.blockquote
+            && self.border == other.border
+            && self.selection == other.selection
+            && self.code_background == other.code_background
+            && self.table_row_hover == other.table_row_hover
             && self.is_dark == other.is_dark
     }
 }
@@ -110,6 +152,19 @@ impl TextViewStyle {
         F: Fn(u8, Pixels) -> Pixels + Send + Sync + 'static,
     {
         self.heading_font_size = Some(Arc::new(f));
+        self
+    }
+    /// Set per-level heading refinements such as color, weight, and a left bar.
+    pub fn heading<F>(mut self, f: F) -> Self
+    where
+        F: Fn(u8) -> StyleRefinement + Send + Sync + 'static,
+    {
+        self.heading = Some(Arc::new(f));
+        self
+    }
+    /// Set the Markdown link color.
+    pub fn link(mut self, color: Hsla) -> Self {
+        self.link = Some(color);
         self
     }
     /// Set style for code blocks.
@@ -146,6 +201,41 @@ impl TextViewStyle {
     /// than the frame.
     pub fn table_cell(mut self, style: StyleRefinement) -> Self {
         self.table_cell = style;
+        self
+    }
+    /// Set inline code padding, radius, border, and font.
+    pub fn inline_code_box(mut self, style: StyleRefinement) -> Self {
+        self.inline_code_box = style;
+        self
+    }
+    /// Set list marker color, weight, and typography.
+    pub fn list(mut self, style: StyleRefinement) -> Self {
+        self.list = style;
+        self
+    }
+    /// Set blockquote bar, padding, and background.
+    pub fn blockquote(mut self, style: StyleRefinement) -> Self {
+        self.blockquote = style;
+        self
+    }
+    /// Set the color of horizontal rules and table borders.
+    pub fn border(mut self, color: Hsla) -> Self {
+        self.border = Some(color);
+        self
+    }
+    /// Set the selected-text background.
+    pub fn selection(mut self, color: Hsla) -> Self {
+        self.selection = Some(color);
+        self
+    }
+    /// Set the fenced code block fill.
+    pub fn code_background(mut self, color: Hsla) -> Self {
+        self.code_background = Some(color);
+        self
+    }
+    /// Set the hovered table body row fill.
+    pub fn table_row_hover(mut self, color: Hsla) -> Self {
+        self.table_row_hover = Some(color);
         self
     }
 }

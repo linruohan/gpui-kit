@@ -390,6 +390,9 @@ pub(super) fn resolve_component_style(
     let table = refined(themed.table().clone(), &legacy.table);
     let table_head = refined(themed.table_head().clone(), &legacy.table_head);
     let table_cell = refined(themed.table_cell().clone(), &legacy.table_cell);
+    let list = refined(themed.list_style().clone(), &legacy.list);
+    let blockquote = refined(themed.blockquote_style().clone(), &legacy.blockquote);
+    let inline_code_box = refined(themed.inline_code_style().clone(), &legacy.inline_code_box);
 
     let mut inline_code = themed.inline_code();
     refine_highlight_style(&mut inline_code, legacy.inline_code);
@@ -401,36 +404,61 @@ pub(super) fn resolve_component_style(
 
     let heading_base_font_size = legacy.heading_base_font_size;
     let heading_font_size = legacy.heading_font_size;
+    let heading = legacy.heading.clone();
+    let link = legacy.link;
     // A style that never touched heading sizes keeps the Base default, which
     // scales headings with the body text; only an explicit base size or
     // resolver pins them to pixels.
     let pins_heading_size = heading_font_size.is_some()
         || heading_base_font_size != TextViewStyle::default().heading_base_font_size;
-    let style = themed
+    let mut style = themed
         .with_paragraph_gap(legacy.paragraph_gap)
         .with_heading(move |level| {
-            if !pins_heading_size {
-                return StyleRefinement::default();
+            let mut refinement = if pins_heading_size {
+                let default_size = match level {
+                    1 => gpui::rems(2.),
+                    2 => gpui::rems(1.5),
+                    3 => gpui::rems(1.25),
+                    4 => gpui::rems(1.125),
+                    _ => gpui::rems(1.),
+                }
+                .to_pixels(heading_base_font_size);
+                let text_size = heading_font_size.as_ref().map_or(default_size, |resolve| {
+                    resolve(level, heading_base_font_size)
+                });
+                StyleRefinement::default().text_size(text_size)
+            } else {
+                StyleRefinement::default()
+            };
+            if let Some(heading) = heading.as_ref() {
+                refinement.refine(&heading(level));
             }
-            let default_size = match level {
-                1 => gpui::rems(2.),
-                2 => gpui::rems(1.5),
-                3 => gpui::rems(1.25),
-                4 => gpui::rems(1.125),
-                _ => gpui::rems(1.),
-            }
-            .to_pixels(heading_base_font_size);
-            let text_size = heading_font_size.as_ref().map_or(default_size, |resolve| {
-                resolve(level, heading_base_font_size)
-            });
-            StyleRefinement::default().text_size(text_size)
+            refinement
         })
         .with_code_block(code_block)
         .with_table(table)
         .with_table_head(table_head)
         .with_table_cell(table_cell)
         .with_inline_code(inline_code)
+        .with_inline_code_style(inline_code_box)
+        .with_list_style(list)
+        .with_blockquote_style(blockquote)
         .with_dark(is_dark);
+    if let Some(link) = link {
+        style = style.with_link(link);
+    }
+    if let Some(border) = legacy.border {
+        style = style.with_border(border);
+    }
+    if let Some(selection) = legacy.selection {
+        style = style.with_selection(selection);
+    }
+    if let Some(code_background) = legacy.code_background {
+        style = style.with_code_background(code_background);
+    }
+    if let Some(table_row_hover) = legacy.table_row_hover {
+        style = style.with_table_row_hover(table_row_hover);
+    }
     style
 }
 
