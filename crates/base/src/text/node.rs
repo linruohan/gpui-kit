@@ -1705,6 +1705,10 @@ impl FlowRender {
 }
 
 /// The text before an object or image, or after the last one.
+///
+/// Its highlights and links are shared with the flow items of every frame
+/// that draws them as they are, and through those with the flow's layout
+/// key, which then finds them unchanged by pointer.
 #[derive(Default)]
 struct FlowText {
     /// The child this text ends at, an object or image; `None` for the text
@@ -1712,9 +1716,9 @@ struct FlowText {
     /// paragraph's state holds the last.
     end: Option<usize>,
     text: SharedString,
-    highlights: Vec<(Range<usize>, InlineHighlight)>,
+    highlights: Arc<[(Range<usize>, InlineHighlight)]>,
     /// The links drawn as links, resolved and replaced.
-    links: Vec<(Range<usize>, LinkMark)>,
+    links: Arc<[(Range<usize>, LinkMark)]>,
 }
 
 /// What a paragraph's render depends on besides its children and links: the
@@ -3287,7 +3291,8 @@ impl Paragraph {
 
     /// The items an inline flow lays out for this paragraph. The text comes
     /// from [`FlowRender`]; objects, images and what changes every frame are
-    /// added to it here.
+    /// added to it here. A text with nothing layered on it takes the cached
+    /// highlights and links themselves, not copies.
     fn inline_flow_items(
         &self,
         leaf_key: Option<TextLeafKey>,
@@ -3375,12 +3380,8 @@ impl Paragraph {
                     InlineFlowItem::Text {
                         text, highlights, ..
                     } => {
-                        *highlights = foreground_highlights(
-                            std::mem::take(highlights),
-                            text,
-                            offset,
-                            foregrounds,
-                        );
+                        *highlights =
+                            foreground_highlights(highlights.clone(), text, offset, foregrounds);
                         offset += text.len();
                     }
                     InlineFlowItem::Object { style, .. } => {
@@ -3435,8 +3436,8 @@ impl Paragraph {
                     FlowText {
                         end: Some(ix),
                         text: std::mem::take(&mut text).into(),
-                        highlights: std::mem::take(&mut highlights),
-                        links: std::mem::take(&mut links),
+                        highlights: std::mem::take(&mut highlights).into(),
+                        links: std::mem::take(&mut links).into(),
                     }
                 });
                 offset = 0;
@@ -3447,8 +3448,8 @@ impl Paragraph {
                 texts.push(FlowText {
                     end: Some(ix),
                     text: std::mem::take(&mut text).into(),
-                    highlights: std::mem::take(&mut highlights),
-                    links: std::mem::take(&mut links),
+                    highlights: std::mem::take(&mut highlights).into(),
+                    links: std::mem::take(&mut links).into(),
                 });
                 offset = 0;
                 continue;
@@ -3475,8 +3476,8 @@ impl Paragraph {
         texts.push(FlowText {
             end: None,
             text: text.into(),
-            highlights,
-            links,
+            highlights: highlights.into(),
+            links: links.into(),
         });
 
         let render = Arc::new(FlowRender {
@@ -4926,8 +4927,8 @@ mod tests {
                 panic!("one text item");
             };
             assert_eq!(flow_text, &text);
-            assert_eq!(flow_highlights, &highlights);
-            assert_eq!(flow_links, &links);
+            assert_eq!(**flow_highlights, *highlights);
+            assert_eq!(**flow_links, *links);
 
             // Public callers can supply marks extending into the next node.
             let paragraph = Paragraph {
@@ -5111,7 +5112,7 @@ mod tests {
                 panic!("text");
             };
             assert_eq!(text.as_ref(), "a中😀link");
-            assert_eq!(links, &vec![(1..12, link.clone())]);
+            assert_eq!(**links, [(1..12, link.clone())]);
             assert!(
                 highlights
                     .iter()
@@ -5516,8 +5517,8 @@ mod tests {
         items: &[InlineFlowItem],
     ) -> Vec<(
         SharedString,
-        Vec<(Range<usize>, InlineHighlight)>,
-        Vec<(Range<usize>, LinkMark)>,
+        Arc<[(Range<usize>, InlineHighlight)]>,
+        Arc<[(Range<usize>, LinkMark)]>,
     )> {
         items
             .iter()
@@ -5585,6 +5586,50 @@ mod tests {
             let items = clone.inline_flow_items(None, &[], &[], &context, cx);
             assert_eq!(flow_texts(&items)[1].0.as_ref(), "after more");
             assert!(Arc::ptr_eq(&built, &cached(&paragraph).unwrap()));
+        });
+    }
+
+    /// A frame that layers nothing on a text hands the flow the highlights
+    /// and links its paragraph cached, not copies, so the flow's layout key
+    /// finds them unchanged by pointer.
+    #[test]
+    fn inline_flow_items_share_the_cached_highlights_and_links() {
+        let mut app = gpui::TestApp::new();
+        let mut window = app.open_window(|_, _| gpui::Empty);
+        window.update(|_, _, cx| {
+            cx.set_global(crate::Theme::default());
+            let link = TextMark::default().link(LinkMark {
+                url: "https://example.com".into(),
+                ..Default::default()
+            });
+            let mut paragraph = Paragraph::default().with_leaf_key(7);
+            paragraph.push(InlineNode::new("see ").marks(vec![(0..3, link)]));
+            paragraph
+                .push(InlineNode::new("run()").marks(vec![(0..5, TextMark::default().code())]));
+            let shares_cache = |context: &NodeContext, cx: &mut gpui::App| {
+                let items = paragraph.inline_flow_items(None, &[], &[], context, cx);
+                let [
+                    InlineFlowItem::Text {
+                        highlights, links, ..
+                    },
+                ] = &items[..]
+                else {
+                    panic!("one text item");
+                };
+                let flow = paragraph.render_cache.flow.lock().unwrap().clone().unwrap();
+                Arc::ptr_eq(highlights, &flow.texts[0].highlights)
+                    && Arc::ptr_eq(links, &flow.texts[0].links)
+            };
+
+            // Frame after frame, and with a host foreground on another part
+            // of the leaf, which does not reach this text.
+            let foreground_elsewhere = NodeContext {
+                foregrounds: Some(Arc::new(HashMap::from([(7, vec![(20..30, gpui::red())])]))),
+                ..Default::default()
+            };
+            assert!(shares_cache(&NodeContext::default(), cx));
+            assert!(shares_cache(&NodeContext::default(), cx));
+            assert!(shares_cache(&foreground_elsewhere, cx));
         });
     }
 
