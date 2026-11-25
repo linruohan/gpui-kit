@@ -72,25 +72,6 @@ gpui_platform = { package = "gpui-pre-platform", version = "=0.3.14", features =
     "runtime_shaders",
 ] }
 gpui_web = { package = "gpui-pre-web", version = "=0.3.14" }
-
-gpui-fast-platform = { package = "gpui-fast-platform", version = "0.1.19", features = [
-    "font-kit",
-    "wayland",
-    "runtime_shaders",
-] }
-gpui-fast-web = { package = "gpui-fast-web", version = "0.1.19" }
-gpui_macros = { package = "gpui-pre-macros", version = "=0.3.14" }
-reqwest_client = { package = "gpui-pre-reqwest-client", version = "=0.3.14" }
-sum-tree = { package = "gpui-pre-sum-tree", version = "=0.3.14" }
-gpui-fast-platform = { package = "gpui-fast-platform", version = "0.1.17", features = [
-    "font-kit",
-    "wayland",
-    "runtime_shaders",
-] }
-gpui-fast-web = { package = "gpui-fast-web", version = "0.1.17" }
-gpui_macros = { package = "gpui-pre-macros", version = "=0.3.12" }
-reqwest_client = { package = "gpui-pre-reqwest-client", version = "=0.3.12" }
-sum-tree = { package = "gpui-pre-sum-tree", version = "=0.3.12" }
 gpui-fast = { package = "gpui-fast", version = "0.1.19", features = [
     "windows-manifest-provided-by-host",
 ] }
