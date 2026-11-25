@@ -70,7 +70,6 @@ Enter 时分别匹配光标前、后的文本；未配置增加缩进模式时�
 这是 Monaco 风格语言配置的已支持子集，不直接加载 Monaco JSON 或 `.scm`。
 包围选区、自定义 `onEnterRules` 留待后续实现。
 
-
 ## 基础用法
 
 ```rust
@@ -121,11 +120,25 @@ let editor = cx.new(|cx| {
 
 `active_line_only_when_focused(true)` 让当前行的行号、当前行背景和光标所在行的折叠按钮只在编辑器或其右键菜单获得焦点时显示，这样界面上有多个编辑器时，只有获得焦点的那个显示当前行。
 
-滚动条默认位于右侧和底部。使用 `scrollbar_placement` 可调整其位置；放在左侧的纵向滚动条位于编辑器左边缘，覆盖在行号之上。与覆盖最后一行的底部滚动条一样，顶部滚动条覆盖在第一行之上，不为自身预留空间。运行时可用 `set_scrollbar_placement` 替换位置。
+滚动条默认位于右侧和底部。使用 `scrollbar_placement` 可调整其位置；放在左侧的纵向滚动条位于编辑器左边缘，覆盖在行号之上；若 gutter 位于右侧，文本会与滚动条保持间距。与覆盖最后一行的底部滚动条一样，顶部滚动条覆盖在第一行之上，不为自身预留空间。运行时可用 `set_scrollbar_placement` 替换位置。
+
+在右侧 gutter、左侧滚动条的镜像窗格中，横向轨道会避开 gutter，纵向轨道仍位于窗格外侧边缘。
 
 ```rust
 EditorState::new(window, cx).scrollbar_placement(ScrollbarPlacement::BottomLeft)
 ```
+
+行号和折叠图标所在的 gutter 默认位于左侧。在并排 diff 中，两侧的 gutter 可以朝向中间，使对应行的行号隔着分隔线相邻。左侧窗格用 `gutter_side` 将 gutter 放到右侧（镜像排列，折叠图标紧邻文本），并把滚动条放到外侧边缘：
+
+```rust
+EditorState::new(window, cx)
+    .scrollbar_placement(ScrollbarPlacement::BottomLeft)
+    .gutter_side(Side::Right)
+```
+
+无论 gutter 位于哪一侧，折叠图标都紧邻文本，向外依次是行号和[行号槽装饰](#行号槽与概览标尺装饰)的竖条。运行时可用 `set_gutter_side` 切换位置。
+
+Editor Diff 示例展示了这两种布局，两个窗格同步滚动。
 
 ## 主动补全
 
@@ -305,7 +318,7 @@ Editor 展示页的 **Decorations** 标签演示了两种集合的组合使用�
 ### 行号槽与概览标尺装饰
 
 需要在文本之外标记整行（例如版本控制 diff 中新增、修改或删除的行）时，使用这两个集合。
-`GutterDecorationCollection` 在行号之前的窄带中绘制标记。
+`GutterDecorationCollection` 在 gutter 外侧边缘、行号之前的窄带中绘制标记。
 `OverviewRulerDecorationCollection` 在垂直滚动条轨道上绘制标记，Monaco 将这条轨道称为概览标尺。
 要同时在两处显示标记，请分别创建两个集合。
 
@@ -410,6 +423,34 @@ added.dispose(cx); // 释放集合，使该句柄及其克隆全部失效。
 文字一起下移。该行尚未布局时返回 `None`。
 Editor 展示页的 **Decorations** 标签用 provider 为最后两行着色。
 
+`EditorState::display_map()` 返回 `&DisplayMap`，供应用只读查询编辑器拥有的文本映射。
+`DisplayMap`、`BufferPoint` 和 `DisplayPoint` 均可从 `gpui_kit::base::input` 或
+`gpui_kit::component::input` 导入。编辑器状态负责更新映射；应用可以用它实现自定义缩略图、
+同步视图，以及缓冲区坐标与显示坐标之间的转换。
+
+```rust
+use gpui_kit::base::input::BufferPoint;
+
+let state = editor.read(cx);
+let map = state.display_map();
+let count = map.display_row_count();
+let rows = map.buffer_line_to_display_row_range(0); // 折叠隐藏的行返回 None
+let display = map.buffer_pos_to_display_pos(BufferPoint::new(0, 0));
+let buffer = map.display_pos_to_buffer_pos(display);
+let version = map.version();
+```
+
+映射覆盖整个已准备的文本，包括视口外的行。软换行使用最近准备的布局参数；文本尚未准备时，
+映射没有显示行。编辑、重新换行或折叠变化会改变 `map.version()`。比较同一映射的版本可以判断
+何时需要重新查询；滚动不会改变版本。
+
+映射不包含内联补全的额外行。显示行序号乘以行高表示文本映射位置，不一定是实际绘制位置：
+多行内联补全会把后续文本向下推，而映射和版本不变。可见行的实际几何信息应通过 `row_bounds` 获取。
+
+缓冲区和显示坐标的序号均从零开始。被折叠隐藏的缓冲区行没有显示行范围（返回 `None`）；
+缓冲区位置与显示位置之间的转换使用映射的坐标转换方法。
+
+>>>>>>>
 ## 值与事件
 
 ```rust

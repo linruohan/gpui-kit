@@ -18,7 +18,6 @@ Base 编辑器接受 `LanguageConfig` 及独立的 `auto_close` / `smart_indent`
 [语言编辑规则](../../component/editor.md#语言编辑规则)。直接使用 Base 时，从
 `gpui_kit::base::input` 导入相同的配置类型。
 
-
 ## 快捷键
 
 Base 与样式组件共享键盘和鼠标行为。各平台快捷键、多光标编辑和矩形列选的细节请参阅
@@ -76,6 +75,14 @@ Monaco 将这条轨道称为概览标尺。这两个集合会保留表示行边�
 
 `create_line_decorations_collection` 挂载一个 `LineDecorationProvider`，编辑器每一帧都会向它
 询问整行背景。背景由 Base 直接绘制。参见[行装饰](../../component/editor.md#行装饰)。
+
+## 显示映射
+
+`EditorState::display_map()` 返回只读的 `&DisplayMap`，供应用查询整个已准备缓冲区的坐标映射。
+编辑器负责更新；使用 `DisplayMap::version()` 判断编辑、重新换行或折叠变化后是否需要重新查询。
+从 `gpui_kit::base::input` 导入 `DisplayMap`、`BufferPoint` 和 `DisplayPoint`。
+查询示例、布局时机，以及文本映射与包含内联补全额外行的实际绘制坐标之间的区别，参见
+[Editor](../../component/editor.md#行装饰)。
 
 ## 高亮与语言功能
 

@@ -82,7 +82,6 @@ This is the supported subset of Monaco-style language configuration, not a
 loader for Monaco JSON or Tree-sitter `.scm` files. Selection-surrounding and
 custom `onEnterRules` are not part of this interface yet.
 
-
 ## Basic usage
 
 ```rust
@@ -149,13 +148,34 @@ focused one shows an active line.
 
 The scrollbars sit on the right and bottom edges by default. Use
 `scrollbar_placement` to move them; a vertical scrollbar on the left sits on
-the editor's left edge, over the line numbers. Like the bottom scrollbar over
-the last line, a top scrollbar overlays the first line rather than reserving
-space for itself. `set_scrollbar_placement` replaces the placement at runtime.
+the editor's left edge, over the line numbers, or clear of the text when the
+gutter is on the right. Like the bottom scrollbar over the last line, a top
+scrollbar overlays the first line rather than reserving space for itself.
+`set_scrollbar_placement` replaces the placement at runtime.
+
+In a mirrored pane with a right gutter and left scrollbar, the horizontal track stops before the gutter while the vertical track stays at the outer edge.
 
 ```rust
 EditorState::new(window, cx).scrollbar_placement(ScrollbarPlacement::BottomLeft)
 ```
+
+The gutter with the line numbers and fold icons sits on the left by default.
+In a side-by-side diff, both gutters can face the center, so the line numbers
+of corresponding lines sit next to each other across the divider. The left pane
+puts its gutter on its right with `gutter_side` — mirrored, the fold icons next
+to the text — and its scrollbar on its outer edge:
+
+```rust
+EditorState::new(window, cx)
+    .scrollbar_placement(ScrollbarPlacement::BottomLeft)
+    .gutter_side(Side::Right)
+```
+
+On either side, the fold icons sit next to the text, then the line numbers,
+then the strip of the [gutter decorations](#gutter-and-overview-ruler-decorations).
+`set_gutter_side` changes the side at runtime.
+
+The Editor Diff story shows both layouts, with the two panes scrolling together.
 
 ## Manual completions
 
@@ -377,7 +397,8 @@ The Editor showcase's **Decorations** tab demonstrates both collection types.
 
 Use these collections to mark whole lines outside the text, such as lines that a
 version-control diff added, modified, or deleted. A `GutterDecorationCollection`
-draws in a strip before the line numbers. An `OverviewRulerDecorationCollection`
+draws in a strip at the outer edge of the gutter, before the line numbers. An
+`OverviewRulerDecorationCollection`
 draws on the vertical scrollbar track. Monaco calls this track the overview ruler.
 Create one collection for each surface you want to use.
 
@@ -497,6 +518,39 @@ hit testing or focus, and has no pointer or keyboard action.
 where it is painted: below a multi-line inline completion, rows move down with the
 text. It returns `None` while the row is not laid out. The **Decorations** tab of the Editor showcase
 tints its last two rows with a provider.
+
+`EditorState::display_map()` returns `&DisplayMap`, a read-only reference to the
+editor-owned text projection. `DisplayMap`, `BufferPoint`, and `DisplayPoint` are
+available from both `gpui_kit::base::input` and `gpui_kit::component::input`.
+The editor state owns updates; applications can query the map to build custom
+minimaps, synchronized views, or buffer/display coordinate conversions.
+
+```rust
+use gpui_kit::base::input::BufferPoint;
+
+let state = editor.read(cx);
+let map = state.display_map();
+let count = map.display_row_count();
+let rows = map.buffer_line_to_display_row_range(0); // None for a folded line
+let display = map.buffer_pos_to_display_pos(BufferPoint::new(0, 0));
+let buffer = map.display_pos_to_buffer_pos(display);
+let version = map.version();
+```
+
+The map covers the whole prepared text, including lines outside the viewport.
+Wrapping follows the latest prepared layout parameters; before text preparation,
+the map has no display rows. `map.version()` changes on edits, rewrapping, and
+fold changes. Compare versions on the same map to invalidate cached queries;
+scrolling does not change the version.
+
+The map excludes inline completion ghost lines. Display row indices multiplied
+by the line height describe text projection positions, not necessarily painted
+positions: multi-line inline completion shifts later text down without changing
+the map or its version. Use `row_bounds` for actual geometry of visible lines.
+
+Buffer and display indices are zero-based. A buffer line hidden by a fold has
+no display-row range (`None`); use the coordinate conversion methods for
+buffer/display positions.
 
 ## Value and events
 

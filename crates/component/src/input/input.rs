@@ -647,17 +647,24 @@ impl RenderOnce for Input {
             },
             cx,
         );
+        let presentation = state.presentation(cx);
         state.set_editor_paddings(
-            if state.presentation(cx).is_multi_line() {
+            if presentation.is_multi_line() {
+                let gutter_padding = if presentation.is_code_editor() {
+                    self.size.input_px().min(px(6.))
+                } else {
+                    self.size.input_px()
+                };
+                let (left, right) = if presentation.gutter_side().is_left() {
+                    (gutter_padding, self.size.input_px())
+                } else {
+                    (self.size.input_px(), gutter_padding)
+                };
                 Edges {
                     top: self.size.input_py(),
-                    right: self.size.input_px(),
+                    right,
                     bottom: self.size.input_py(),
-                    left: if state.presentation(cx).is_code_editor() {
-                        self.size.input_px().min(px(6.))
-                    } else {
-                        self.size.input_px()
-                    },
+                    left,
                 }
             } else {
                 Edges::default()
@@ -1206,13 +1213,13 @@ mod tests {
     #[gpui::test]
     fn test_fold_candidates_survive_typing_after_a_fold(cx: &mut gpui::TestAppContext) {
         const SQL: &str = "SELECT id\nFROM t\nWHERE id = 1;\nSELECT 2;\n";
-        let next_row = SQL.find("SELECT 2").unwrap();
+        let next_statement = SQL.find("SELECT 2").unwrap();
 
         let (editor, mut cx) = fold_test_editor("sql", cx);
         cx.update(|window, cx| {
             editor.update(cx, |state, cx| {
                 state.set_value(SQL, window, cx);
-                state.set_selected_range(next_row..next_row, cx);
+                state.set_selected_range(next_statement..next_statement, cx);
             });
             let _ = window.draw(cx);
         });
