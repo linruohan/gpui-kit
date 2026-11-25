@@ -24,6 +24,7 @@ See [Language editing rules](../../component/editor.md#language-editing-rules)
 for the configuration fields and language registration; import the same types
 from `gpui_kit::base::input` when using Base directly.
 
+
 ## Keyboard shortcuts
 
 The base and styled editors share keyboard and mouse behavior. See

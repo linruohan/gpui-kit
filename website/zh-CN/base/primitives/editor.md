@@ -18,6 +18,7 @@ Base 编辑器接受 `LanguageConfig` 及独立的 `auto_close` / `smart_indent`
 [语言编辑规则](../../component/editor.md#语言编辑规则)。直接使用 Base 时，从
 `gpui_kit::base::input` 导入相同的配置类型。
 
+
 ## 快捷键
 
 Base 与样式组件共享键盘和鼠标行为。各平台快捷键、多光标编辑和矩形列选的细节请参阅
