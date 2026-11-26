@@ -11,9 +11,9 @@ use crate::{
     sidebar::{Sidebar, SidebarGroup, SidebarItem, SidebarMenu, SidebarMenuItem},
 };
 use gpui::{
-    App, AppContext as _, Axis, ElementId, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, RenderOnce, SharedString, StyleRefinement, Styled, Window,
-    container_query, div, prelude::FluentBuilder as _, px, relative,
+    AnyElement, App, AppContext as _, Axis, ElementId, Entity, InteractiveElement as _,
+    IntoElement, ParentElement as _, Pixels, RenderOnce, SharedString, StyleRefinement, Styled,
+    Window, container_query, div, prelude::FluentBuilder as _, px, relative,
 };
 use rust_i18n::t;
 use std::rc::Rc;
@@ -200,9 +200,30 @@ impl Settings {
     ) -> AnyElement {
         let selected_index = state.read(cx).selected_index;
         let search_input = state.read(cx).search_input.clone();
-        let has_sections = filter
-            .visible_pages()
-            .any(|page_ix| self.pages[page_ix].section.is_some());
+        let header = div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .refine_style(&self.header_style)
+            // The input passes on an Escape it has no use for. Clear a
+            // non-empty query with it; otherwise let it reach an enclosing
+            // dialog or window. On Android, Escape is the back button,
+            // which never edits a field.
+            .on_action({
+                let search_input = search_input.clone();
+                move |_: &Escape, window, cx| {
+                    if search_input.read(cx).value().is_empty() || cfg!(target_os = "android") {
+                        cx.propagate();
+                        return;
+                    }
+                    search_input.update(cx, |input, cx| input.clean(window, cx));
+                }
+            })
+            .when_some(self.leading.clone(), |this, leading| {
+                this.child(leading(window, cx))
+            })
+            .child(Input::new(&search_input).prefix(IconName::Search));
 
         let page_item = |page_ix: usize| {
             let page = &self.pages[page_ix];
@@ -268,76 +289,6 @@ impl Settings {
             .collapsible(false)
             .collapsed(false)
             .header(header)
-            .children(buckets.into_iter().map(|(label, pages)| {
-                SidebarGroup::new(label).child(SidebarMenu::new().children(
-                    pages.into_iter().map(|page_ix| {
-                        self.sidebar_page_item(page_ix, state, filter, selected_index)
-                    }),
-                ))
-            }))
-            .into_any_element()
-    }
-
-    fn sidebar_page_item(
-        &self,
-        page_ix: usize,
-        state: &Entity<SettingsState>,
-        filter: &SettingsFilter,
-        selected_index: SelectIndex,
-    ) -> SidebarMenuItem {
-        let page = &self.pages[page_ix];
-        let groups = &filter.groups[page_ix];
-        let nav_groups: Vec<usize> = groups
-            .iter()
-            .copied()
-            .filter(|&ix| page.groups[ix].title.is_some() && page.groups[ix].in_nav)
-            .collect();
-        let is_page_active = selected_index.page_ix == page_ix
-            && (selected_index.group_ix.is_none() || nav_groups.len() <= 1);
-        // Going to a page opens its groups; clicking the title of
-        // the page on display again folds or unfolds them.
-        let is_page_shown = selected_index.page_ix == page_ix;
-        SidebarMenuItem::new(page.title.clone())
-            .click_to_open(!is_page_shown)
-            .click_to_toggle(is_page_shown)
-            .when_some(page.icon.clone(), |this, icon| this.icon(icon))
-            .default_open(page.default_open)
-            .active(is_page_active)
-            .on_click({
-                let state = state.clone();
-                move |_, _, cx| {
-                    state.update(cx, |state, cx| {
-                        state.selected_index = SelectIndex {
-                            page_ix,
-                            ..Default::default()
-                        };
-                        state.deferred_scroll_group_ix = None;
-                        cx.notify();
-                    })
-                }
-            })
-            .when(!nav_groups.is_empty(), |this| {
-                this.children(nav_groups.into_iter().map(|group_ix| {
-                    let group = &page.groups[group_ix];
-                    let is_active = selected_index.page_ix == page_ix
-                        && selected_index.group_ix == Some(group_ix);
-                    let title = group.title.clone().unwrap_or_default();
-
-                    SidebarMenuItem::new(title).active(is_active).on_click({
-                        let state = state.clone();
-                        move |_, _, cx| {
-                            state.update(cx, |state, cx| {
-                                state.selected_index = SelectIndex {
-                                    page_ix,
-                                    group_ix: Some(group_ix),
-                                };
-                                state.deferred_scroll_group_ix = Some(group_ix);
-                                cx.notify();
-                            })
-                        }
-                    })
-                    .child(Input::new(&search_input).prefix(IconName::Search)),
-            )
             .children(
                 self.sidebar_sections(filter)
                     .into_iter()
@@ -349,6 +300,7 @@ impl Settings {
                         }
                     }),
             )
+            .into_any_element()
     }
 }
 
