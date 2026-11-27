@@ -2,8 +2,8 @@ use std::{ops::Range, time::Duration};
 
 use gpui::{
     AnyElement, App, Context, ElementId, Entity, FollowMode, Hsla, InteractiveElement as _,
-    IntoElement, ListAlignment, ListOffset, ListState, ParentElement as _, Pixels, RenderOnce, Role,
-    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    IntoElement, ListAlignment, ListOffset, ListState, ParentElement as _, Pixels, RenderOnce,
+    Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     linear_color_stop, linear_gradient, list, prelude::FluentBuilder as _, px, rems,
 };
 use gpui_base::motion::{Transition, transition};
@@ -98,7 +98,8 @@ impl MessageScrollerState {
     pub fn reset(&mut self, item_count: usize, cx: &mut Context<Self>) {
         match self.uniform_item_height {
             Some(height) if !self.uniform_item_height_pending => {
-                self.list_state.reset_with_uniform_height(item_count, height);
+                self.list_state
+                    .reset_with_uniform_height(item_count, height);
             }
             _ => self.list_state.reset(item_count),
         }
@@ -702,9 +703,8 @@ mod tests {
         const ROWS: usize = 1000;
         const ROW_HEIGHT: f32 = 72.;
         cx.update(crate::init);
-        let hinted = cx.new(|cx| {
-            MessageScrollerState::new(ROWS, cx).with_uniform_item_height(px(ROW_HEIGHT))
-        });
+        let hinted = cx
+            .new(|cx| MessageScrollerState::new(ROWS, cx).with_uniform_item_height(px(ROW_HEIGHT)));
         let plain = cx.new(|cx| MessageScrollerState::new(ROWS, cx));
         let max_offset = |state: Entity<MessageScrollerState>, cx: &mut gpui::TestAppContext| {
             let (_, cx) = cx.add_window_view({

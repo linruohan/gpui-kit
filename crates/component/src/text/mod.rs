@@ -551,7 +551,7 @@ mod tests {
         );
 
         assert_eq!(style.list_style().text.color, Some(gold));
-        assert_eq!(style.blockquote_style().border.color, Some(gold.into()));
+        assert_eq!(style.blockquote_style().border_color, Some(gold.into()));
         assert_eq!(style.border(), gold);
         assert_eq!(style.selection(), gold);
         assert_eq!(style.code_background(), gold);
