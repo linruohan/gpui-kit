@@ -15,6 +15,10 @@ pub struct TextViewStyle {
     foreground: Hsla,
     muted_foreground: Hsla,
     link: Hsla,
+    /// The color of the link under the pointer, or [`Self::link`] when `None`.
+    link_hover: Option<Hsla>,
+    /// The color of destinations the application marks unresolved, or a faded
+    /// link color when `None`.
     unresolved_link: Option<Hsla>,
     selection: Hsla,
     code_background: Hsla,
@@ -48,6 +52,7 @@ impl PartialEq for TextViewStyle {
             && self.foreground == other.foreground
             && self.muted_foreground == other.muted_foreground
             && self.link == other.link
+            && self.link_hover == other.link_hover
             && self.unresolved_link == other.unresolved_link
             && self.selection == other.selection
             && self.code_background == other.code_background
@@ -93,6 +98,7 @@ impl TextViewStyle {
             foreground: colors.foreground,
             muted_foreground: colors.muted_foreground,
             link: colors.primary,
+            link_hover: None,
             unresolved_link: None,
             selection: colors.selection,
             code_background: colors.accent,
@@ -131,6 +137,13 @@ impl TextViewStyle {
     /// Sets the link text color.
     pub fn with_link(mut self, color: Hsla) -> Self {
         self.link = color;
+        self
+    }
+
+    /// Sets the color of the link under the pointer. Unset, a hovered link
+    /// keeps the [link color](Self::with_link) and only the cursor changes.
+    pub fn with_link_hover(mut self, color: Hsla) -> Self {
+        self.link_hover = Some(color);
         self
     }
 
@@ -293,9 +306,20 @@ impl TextViewStyle {
         self.muted_foreground
     }
 
+    fn without_link_hover(mut self) -> Self {
+        self.link_hover = None;
+        self
+    }
+
     /// The link text color.
     pub fn link(&self) -> Hsla {
         self.link
+    }
+
+    /// The color of the link under the pointer: the hover color when one is
+    /// set, the link color otherwise.
+    pub fn link_hover(&self) -> Hsla {
+        self.link_hover.unwrap_or(self.link)
     }
 
     /// The color of destinations marked unresolved, or a faded link color.
@@ -417,6 +441,7 @@ impl TextViewStyle {
             .with_muted_foreground(color.opacity(0.7))
             .with_link(color)
             .with_unresolved_link(color.opacity(0.5))
+            .without_link_hover()
             .with_selection(color.opacity(0.25))
             .with_code_background(code_background)
             .with_border(color.opacity(0.2))
@@ -476,6 +501,22 @@ mod tests {
     use gpui::{Styled as _, px};
 
     use super::*;
+
+    #[test]
+    fn a_hovered_link_keeps_the_link_color_until_given_its_own() {
+        let style = TextViewStyle::default().with_link(gpui::blue());
+        assert_eq!(style.link_hover(), gpui::blue());
+
+        let style = style.with_link_hover(gpui::red());
+        assert_eq!(style.link_hover(), gpui::red());
+        assert!(style != TextViewStyle::default().with_link(gpui::blue()));
+
+        // On an inverted surface links take the surface text color, and a
+        // hovered link stays with it.
+        let colors = ColorTokens::light();
+        let inverted = style.on_text_color(colors.primary_foreground);
+        assert_eq!(inverted.link_hover(), inverted.link());
+    }
 
     #[test]
     fn selection_layout_fingerprint_covers_callback_table_and_theme_fields() {
