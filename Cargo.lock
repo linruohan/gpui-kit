@@ -11185,8 +11185,8 @@ dependencies = [
 
 [[package]]
 name = "tyme4rs"
-version = "1.5.0"
-source = "git+https://github.com/linruohan/tyme4rs.git#12fc5a797d57e680e1fb3cc8b33a50ba1f9b1e13"
+version = "1.5.1"
+source = "git+https://github.com/linruohan/tyme4rs.git#c74f92e11d420b2f50260d7f4846044da81638be"
 dependencies = [
  "lazy_static",
  "regex",
